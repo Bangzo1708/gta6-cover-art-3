@@ -1,0 +1,109 @@
+/* Vice Cover Studio — dark neon editor chrome. The cover itself is drawn on
+   canvas (see src/cover.js); this sheet only dresses the page around it. */
+:root {
+  --ink: #14081d;
+  --ink-2: #1e0f2e;
+  --panel: #221133;
+  --line: #3a2350;
+  --paper: #fff4e6;
+  --muted: #b9a8cc;
+  --pink: #ff2ea6;
+  --cyan: #00e5ff;
+  --gold: #ffb347;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body {
+  background: radial-gradient(1200px 600px at 85% -10%, rgba(255, 46, 166, 0.22), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(0, 229, 255, 0.14), transparent 55%),
+    var(--ink);
+  color: var(--paper);
+  font: 15px/1.45 "Noto Sans", "DejaVu Sans", system-ui, sans-serif;
+}
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px 24px; border-bottom: 1px solid var(--line);
+  background: rgba(20, 8, 29, 0.85);
+}
+.brand { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.brand-mark {
+  flex: none; width: 46px; height: 46px; display: grid; place-items: center;
+  font-weight: 900; font-size: 20px; letter-spacing: 1px; color: var(--ink);
+  background: linear-gradient(135deg, var(--gold), var(--pink) 60%, #7b2fff);
+  border-radius: 10px; transform: rotate(-4deg);
+}
+.brand h1 { margin: 0; font-size: 24px; letter-spacing: 0.5px; }
+.brand p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.export-top {
+  flex: none; font: inherit; font-weight: 800; padding: 12px 22px; border: 0; border-radius: 10px;
+  color: var(--ink); background: linear-gradient(135deg, var(--gold), var(--pink));
+  cursor: pointer; box-shadow: 0 4px 24px rgba(255, 46, 166, 0.35);
+}
+.layout {
+  display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px;
+  padding: 20px 24px 28px; max-width: 1440px; margin: 0 auto; align-items: start;
+}
+.panel {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 18px 20px;
+}
+.controls h2 { margin: 20px 0 8px; font-size: 13px; letter-spacing: 2px; text-transform: uppercase; color: var(--gold); }
+.controls h2:first-child { margin-top: 0; }
+.hint { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: inherit; font-size: 13px; font-weight: 700; padding: 8px 12px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--ink-2); color: var(--paper); cursor: pointer;
+}
+.chip.active { border-color: var(--pink); background: rgba(255, 46, 166, 0.22); }
+.swatch {
+  font: inherit; font-size: 12px; font-weight: 700; padding: 8px 12px; border-radius: 8px;
+  border: 2px solid transparent; color: #fff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6); cursor: pointer;
+}
+.swatch.active { border-color: #fff; }
+label { display: flex; flex-direction: column; gap: 5px; font-weight: 600; font-size: 13px; margin-bottom: 10px; }
+input[type=text] {
+  font: inherit; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--ink-2); color: var(--paper);
+}
+input[type=text]:focus { outline: 2px solid var(--pink); outline-offset: 1px; }
+.effects { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.effects label { flex-direction: row; align-items: center; gap: 8px; font-weight: 500; margin: 0; }
+.ghost {
+  font: inherit; font-weight: 700; padding: 8px 14px; border-radius: 8px; margin-top: 4px;
+  border: 1px solid var(--line); background: transparent; color: var(--paper); cursor: pointer;
+}
+#status { margin: 14px 0 0; color: var(--cyan); min-height: 20px; font-size: 13px; }
+.slot {
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+  background: var(--ink-2);
+}
+.slot.selected { border-color: var(--pink); box-shadow: 0 0 0 1px var(--pink); }
+.slot-pick { background: none; border: 0; padding: 0; font: inherit; color: var(--paper); cursor: pointer; text-align: left; }
+.slot-name { font-weight: 700; }
+.slot-file {
+  display: inline-block; margin: 8px 0 4px; padding: 6px 12px; border-radius: 6px;
+  background: var(--line); color: var(--paper); font-size: 13px; cursor: pointer;
+}
+.slot label { margin-bottom: 4px; font-weight: 500; color: var(--muted); }
+.slot input[type=range] { width: 100%; accent-color: var(--pink); }
+#zoom-val { color: var(--paper); font-weight: 700; }
+.stage-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.stage-head h2 { margin: 0 0 12px; font-size: 16px; }
+.stage-head .hint { margin: 0; text-align: right; }
+#preview {
+  display: block; width: 100%; height: auto; max-height: calc(100vh - 220px);
+  border-radius: 8px; cursor: grab; background: var(--ink);
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+#preview:active { cursor: grabbing; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .brand p { display: none; }
+}
+/* Screenshot mode: the cover alone, edge to edge. */
+body.shot-cover { background: var(--ink); }
+body.shot-cover .topbar, body.shot-cover .controls, body.shot-cover .stage-head { display: none; }
+body.shot-cover .layout { display: block; padding: 0; max-width: none; }
+body.shot-cover .stage { background: none; border: 0; border-radius: 0; padding: 0; }
+body.shot-cover #preview { width: 100vw; height: 100vh; max-height: none; border-radius: 0; box-shadow: none; object-fit: contain; }

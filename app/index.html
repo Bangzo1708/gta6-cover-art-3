@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vice Cover Studio — GTA 6-style cover maker</title>
+<meta name="description" content="Turn any photo and a caption into multi-panel GTA 6-style cover art. Offline, in your browser.">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">VC</span>
+    <div>
+      <h1>Vice Cover Studio</h1>
+      <p>Any photo + a caption &rarr; GTA 6-style cover art. Offline &mdash; your photos never leave this machine.</p>
+    </div>
+  </div>
+  <button id="export" type="button" class="export-top">Export PNG</button>
+</header>
+
+<main class="layout">
+  <section class="panel controls" aria-label="Cover controls">
+    <h2>1 · Photos</h2>
+    <p class="hint">Click a slot to select it, then drag its photo on the preview or use the sliders. Upload your own, or keep the samples.</p>
+    <div id="slots"></div>
+    <button id="shuffle" type="button" class="ghost">Rotate photos</button>
+
+    <h2>2 · Template</h2>
+    <div id="templates" class="row"></div>
+
+    <h2>3 · Colour grade</h2>
+    <div id="grades" class="row"></div>
+
+    <h2>4 · Lettering</h2>
+    <label>Title
+      <input id="title" type="text" maxlength="24" value="VICE CITY">
+    </label>
+    <label>Subtitle
+      <input id="subtitle" type="text" maxlength="40" value="SUNSET HEIST">
+    </label>
+    <label>Tagline
+      <input id="tagline" type="text" maxlength="40" value="A VICE CITY STORY">
+    </label>
+
+    <h2>5 · Effects</h2>
+    <div id="effects" class="effects">
+      <label><input type="checkbox" data-effect="halftone" checked> Halftone dots</label>
+      <label><input type="checkbox" data-effect="vignette" checked> Vignette</label>
+      <label><input type="checkbox" data-effect="grain" checked> Film grain</label>
+      <label><input type="checkbox" data-effect="gutters" checked> Panel gutters</label>
+    </div>
+
+    <h2>6 · Export size</h2>
+    <div id="sizes" class="row"></div>
+    <p id="status" role="status"></p>
+  </section>
+
+  <section class="panel stage" aria-label="Live cover preview">
+    <div class="stage-head">
+      <h2>Live preview</h2>
+      <p class="hint">Drag a photo to slide it &middot; scroll over it to zoom &middot; click a panel to select it.</p>
+    </div>
+    <canvas id="preview" width="1080" height="1080" aria-label="The cover preview"></canvas>
+  </section>
+</main>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
