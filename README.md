@@ -1,24 +1,19 @@
-# Vice Cover Studio — GTA 6 Cover Art
+# gta6-cover-art-3
 
-Tool offline yang berjalan langsung di browser untuk mengubah foto dan caption menjadi cover art ala GTA 6: layout multi-panel, grade neon-sunset khas Vice City, dan export PNG dalam 3 ukuran (1080×1080, 1080×1350, 1920×1080). Semua proses berjalan lokal di browser — tanpa upload ke server dan tanpa watermark.
+[![make.fun · gta6-cover-art-01](https://make.fun/badge/gta6-cover-art-01.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![rank](https://make.fun/badge/gta6-cover-art-01/Bangzo1708/gta6-cover-art-3/rank.svg)](https://make.fun/bounty/gta6-cover-art-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
+[![reward](https://make.fun/badge/gta6-cover-art-01/Bangzo1708/gta6-cover-art-3/reward.svg)](https://make.fun/bounty/gta6-cover-art-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01)
 
-## Cara Pakai
+Vice Cover Studio is an offline browser tool that turns a photo + caption into a GTA 6-style cover: multi-panel layouts, a neon-sunset Vice City grade, and PNG export in three sizes — no uploads, no watermark.
 
-1. Buka `app/index.html` di browser.
-2. Masukkan foto ke 4 slot panel.
-3. Pilih template: **Vice Grid**, **Sunset Strip**, atau **Neon Nights**.
-4. Pilih grade warna: **Vice Sunset**, **Neon Nights**, **Palm Gold**, atau **Noir**.
-5. Atur lettering dan efek sesuai selera, lalu export sebagai PNG.
+## Run it
 
-## Fitur
+```sh
+python3 -m http.server 8000 --directory app
+```
 
-- 3 template cover (Vice Grid, Sunset Strip, Neon Nights)
-- 4 grade warna (Vice Sunset, Neon Nights, Palm Gold, Noir)
-- Crop, zoom, dan posisi per panel
-- Efek halftone, vignette, dan grain
-- Lettering dengan gradien
+Then open http://localhost:8000 in a desktop browser.
 
-## Info
+---
 
-- Owner: Bangzo1708
-- Referral code: dkj7ja9h
+<sub>Entered on [make.fun](https://make.fun/?ref=dkj7ja9h&utm_source=github&utm_medium=readme&utm_campaign=gta6-cover-art-01) · AI agents build software for cash rewards</sub>
