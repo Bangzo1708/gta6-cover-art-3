@@ -1,77 +1,163 @@
-// Vice Cover Studio — shared state: templates, colour grades, export sizes and the
-// default cover. Everything the renderer needs lives here so the page (main.js), the
-// screenshot scenes (shots.js) and the drawing engine (cover.js) all agree on one shape.
-//
-// A cover state is:
-//   {
-//     template: 'vice-grid' | 'sunset-strip' | 'neon-nights',
-//     grade:    'sunset' | 'neon' | 'gold' | 'noir',
-//     size:     '1080x1080' | '1080x1350' | '1920x1080',
-//     title:    string,            // big poster lettering, uppercased when drawn
-//     subtitle: string,            // letterspaced line under the title
-//     tagline:  string,            // small line tucked into the hero corner
-//     effects:  { halftone: bool, vignette: bool, grain: bool, gutters: bool },
-//     panels:   [ { photo, zoom, ox, oy } x 4 ]   // photo: an <img>/canvas or null
-//   }
-// Panel photos are filled in by the page: the two bundled samples first, then the
-// person's own uploads. zoom is a multiplier on the cover-fit scale (1 = fit);
-// ox / oy shift the photo inside its panel as a fraction of the panel (-0.5 .. 0.5).
+// Vice Cover Studio — shared state: templates, colour grades, photo slots,
+// lettering and effects. Plain data and small helpers only; no DOM here, so the
+// cover renderer and the editor both read the same single source of truth.
 
-export const SIZES = {
-  '1080x1080': { w: 1080, h: 1080, label: 'Square · 1080 × 1080' },
-  '1080x1350': { w: 1080, h: 1350, label: 'Portrait · 1080 × 1350' },
-  '1920x1080': { w: 1920, h: 1080, label: 'Wide · 1920 × 1080' },
-};
-
-export const TEMPLATES = {
-  'vice-grid': {
-    label: 'Vice Grid',
-    hint: 'Classic key-art grid: one big hero, three supporting panels.',
-    titleBand: 0.2, // fraction of the height taken by the lettering band at the foot
+/** The three cover templates. `aspect` is width / height of the poster. */
+export const TEMPLATES = [
+  {
+    id: 'vice-grid',
+    name: 'Vice Grid',
+    blurb: 'Key-art grid: one hero panel, three supporting panels, bold title band.',
+    aspect: 1,
   },
-  'sunset-strip': {
-    label: 'Sunset Strip',
-    hint: 'Tall poster: hero on top, a strip of moments below.',
-    titleBand: 0.15,
+  {
+    id: 'sunset-strip',
+    name: 'Sunset Strip',
+    blurb: 'Tall poster of diagonal comic strips with a halftone sunset.',
+    aspect: 1080 / 1350,
   },
-  'neon-nights': {
-    label: 'Neon Nights',
-    hint: 'Diagonal slices, neon dividers, made for wide covers.',
-    titleBand: 0.18,
+  {
+    id: 'neon-nights',
+    name: 'Neon Nights',
+    blurb: 'Wide night poster: four neon-framed panels under a glowing title.',
+    aspect: 16 / 9,
   },
-};
+];
 
-export const GRADES = {
-  sunset: { label: 'Vice Sunset', swatch: 'linear-gradient(135deg,#ff5e62,#ff9966 55%,#c2188b)' },
-  neon: { label: 'Neon Nights', swatch: 'linear-gradient(135deg,#ff2ea6,#7b2fff 55%,#00e5ff)' },
-  gold: { label: 'Palm Gold', swatch: 'linear-gradient(135deg,#ffd166,#f4842b 55%,#0f766e)' },
-  noir: { label: 'Noir', swatch: 'linear-gradient(135deg,#e8e8e8,#5a5a5a 55%,#111111)' },
-};
+/** The four colour grades. Each carries the wash gradient, the lettering
+ *  gradient, the glow colour and the vignette tint it paints over the photos. */
+export const GRADES = [
+  {
+    id: 'vice-sunset',
+    name: 'Vice Sunset',
+    washTop: 'rgba(255, 94, 98, 0.00)',
+    washMid: 'rgba(255, 122, 89, 0.20)',
+    washBottom: 'rgba(124, 38, 120, 0.55)',
+    titleTop: '#ffd166',
+    titleBottom: '#ff5e62',
+    glow: 'rgba(255, 94, 98, 0.85)',
+    vignette: 'rgba(43, 16, 56, 0.55)',
+    band: '#2b1038',
+  },
+  {
+    id: 'neon-nights',
+    name: 'Neon Nights',
+    washTop: 'rgba(34, 211, 238, 0.00)',
+    washMid: 'rgba(168, 85, 247, 0.18)',
+    washBottom: 'rgba(255, 46, 136, 0.50)',
+    titleTop: '#67e8f9',
+    titleBottom: '#ff2e88',
+    glow: 'rgba(255, 46, 136, 0.9)',
+    vignette: 'rgba(8, 6, 24, 0.6)',
+    band: '#0a0618',
+  },
+  {
+    id: 'palm-gold',
+    name: 'Palm Gold',
+    washTop: 'rgba(255, 214, 120, 0.00)',
+    washMid: 'rgba(255, 170, 60, 0.22)',
+    washBottom: 'rgba(20, 90, 80, 0.55)',
+    titleTop: '#fff3b0',
+    titleBottom: '#ff9e00',
+    glow: 'rgba(255, 170, 60, 0.85)',
+    vignette: 'rgba(10, 42, 38, 0.55)',
+    band: '#0e2a26',
+  },
+  {
+    id: 'noir',
+    name: 'Noir',
+    washTop: 'rgba(255, 255, 255, 0.00)',
+    washMid: 'rgba(160, 160, 170, 0.16)',
+    washBottom: 'rgba(0, 0, 0, 0.62)',
+    titleTop: '#ffffff',
+    titleBottom: '#c9c9d4',
+    glow: 'rgba(255, 255, 255, 0.7)',
+    vignette: 'rgba(0, 0, 0, 0.62)',
+    band: '#101014',
+  },
+];
 
-/** A fresh panel slot: no photo yet, fit at 1:1 zoom, centred. */
-export function blankPanel() {
-  return { photo: null, zoom: 1, ox: 0, oy: 0 };
+/** The three export sizes: the common post sizes the bounty asks for. */
+export const EXPORT_SIZES = [
+  { id: 'square', label: '1080 × 1080 · square post', w: 1080, h: 1080 },
+  { id: 'portrait', label: '1080 × 1350 · portrait post', w: 1080, h: 1350 },
+  { id: 'wide', label: '1920 × 1080 · wide post', w: 1920, h: 1080 },
+];
+
+/** The six editor steps, in the order a person walks them. */
+export const STEPS = [
+  { id: 'photos', label: '1 · Photos' },
+  { id: 'template', label: '2 · Template' },
+  { id: 'grade', label: '3 · Grade' },
+  { id: 'lettering', label: '4 · Lettering' },
+  { id: 'effects', label: '5 · Effects' },
+  { id: 'size', label: '6 · Size & export' },
+];
+
+/** One photo slot: what image it holds and how it is cropped inside a panel.
+ *  `zoom` 1 fills the panel; `fx`/`fy` 0..1 move the focal point. */
+export function makePhotoSlot(src) {
+  return { src, zoom: 1, fx: 0.5, fy: 0.5 };
 }
 
-/** The cover the page opens with: Vice Grid, Vice Sunset grade, square export. */
-export function defaultState() {
+/** A fresh editor state. Slots 0 and 1 start on the two kit sample photos;
+ *  slots 2 and 3 reuse them with different crops until the user uploads. */
+export function createDefaultState() {
   return {
     template: 'vice-grid',
-    grade: 'sunset',
-    size: '1080x1080',
+    grade: 'vice-sunset',
     title: 'VICE CITY',
-    subtitle: 'SUNSET HEIST',
-    tagline: 'A VICE CITY STORY',
-    effects: { halftone: true, vignette: true, grain: true, gutters: true },
-    panels: [blankPanel(), blankPanel(), blankPanel(), blankPanel()],
+    subtitle: 'A STORY IN NEON',
+    photos: [
+      makePhotoSlot('samples/pier.jpg'),
+      makePhotoSlot('samples/boulevard.jpg'),
+      makePhotoSlot('samples/pier.jpg'),
+      makePhotoSlot('samples/boulevard.jpg'),
+    ],
+    // Which photo slot fills each of the four panels, in panel order.
+    panelPhoto: [0, 1, 2, 3],
+    // Per-panel crop offsets, so the same photo can show a different part.
+    panelCrop: [
+      { fx: 0.5, fy: 0.42 },
+      { fx: 0.5, fy: 0.5 },
+      { fx: 0.32, fy: 0.55 },
+      { fx: 0.68, fy: 0.45 },
+    ],
+    effects: { halftone: true, vignette: true, grain: true, grainSeed: 7 },
+    size: 'square',
+    step: 'photos',
   };
 }
 
-/** Shallow-clones a state (panels are shared by reference — photos are immutable). */
-export function cloneState(state) {
-  return {
-    ...state,
-    effects: { ...state.effects },
-    panels: state.panels.map((p) => ({ ...p })),
+/** Deterministic PRNG (mulberry32): the grain and halftone never change
+ *  between runs for the same seed, so an export is reproducible. */
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** Clamps `v` into [lo, hi]. */
+export function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+/** Looks a template up by id, falling back to the first one. */
+export function templateById(id) {
+  return TEMPLATES.find((t) => t.id === id) ?? TEMPLATES[0];
+}
+
+/** Looks a grade up by id, falling back to the first one. */
+export function gradeById(id) {
+  return GRADES.find((g) => g.id === id) ?? GRADES[0];
+}
+
+/** Looks an export size up by id, falling back to the first one. */
+export function sizeById(id) {
+  return EXPORT_SIZES.find((s) => s.id === id) ?? EXPORT_SIZES[0];
 }

@@ -1,121 +1,230 @@
-// Vice Cover Studio — the hand-in program for gta6-cover-art-01 (Node 22, standard
-// library only). It assembles the entry in /output: the web app from app/, the four
-// screenshots from screenshots/, and the dossier the judge reads, written by the
-// kit's vendored library (vendor/makefun-app.ts). Outside the grader's container
-// MAKEFUN_OUTPUT_DIR stands in for /output:
+// Vice Cover Studio — the entrypoint (Node 22, standard library only).
+// Hands the app in: pre-checks app/index.html and screenshots/, copies app/
+// and screenshots/ from beside this file to /output (or MAKEFUN_OUTPUT_DIR
+// outside the grader), writes /output/dossier.json with the vendored make.fun
+// library, then verifies the dossier is byte-identical to a fresh build and
+// under the 1.5 MiB cap. Any failed check exits 1 with a named error, so a
+// broken entry never ships silently.
 //
-//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-//
-// The program is deliberately strict before it writes anything: it refuses to
-// hand in a broken entry (missing index.html, a wrong number of screenshots, an
-// oversize image) with a named error instead of failing halfway through the copy,
-// and after writing it reads the dossier back and checks it byte for byte against
-// a fresh build, so a bad dossier can never be submitted by accident. Any failure
-// exits non-zero with the reason on stderr; success prints a short summary.
+// Run it locally with: mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-// The scorer's own caps (the kit's gate.json, passed through unchanged): only
-// text_max_bytes shapes the dossier's bytes; the rest refuse an entry the scorer
-// would refuse, so this program refuses it first, with a clearer message.
-const DOSSIER_CAPS = {
+// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the
+// bytes; the others refuse an entry the scorer would refuse (more than 4
+// screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB of
+// app files, in all, or a path under app/ over 1000 bytes).
+const DOSSIER_OPTIONS = {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   app_max_files: 993,
   app_max_bytes: 50331648,
   app_path_max_bytes: 1000,
-} as const;
+};
+const DOSSIER_MAX_BYTES = 1572864; // 1.5 MiB
+const OUTPUT_MAX_ENTRIES = 1000;
+const OUTPUT_MAX_BYTES = 67108864; // 64 MiB
 
-const SHOT_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg']);
+const here = fileURLToPath(new URL('.', import.meta.url));
+const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-/** A fatal, named failure: printed to stderr, exit code 1. */
-function fail(message: string): never {
-  console.error(`main.ts: ${message}`);
-  process.exit(1);
+/** A named failure: the code names the check, the message says what broke. */
+class EntryError extends Error {
+  constructor(code, message) {
+    super(`[${code}] ${message}`);
+    this.code = code;
+  }
 }
 
-const here = resolve(fileURLToPath(new URL('.', import.meta.url)));
-const outDir = resolve(process.env.MAKEFUN_OUTPUT_DIR ?? '/output');
+function fail(code, message) {
+  throw new EntryError(code, message);
+}
 
-/** The app's own front door: the entry is not an entry without it. */
-function checkApp(): void {
+/** Counts the files and bytes under a directory, recursively. */
+function countTree(dir) {
+  let files = 0;
+  let bytes = 0;
+  for (const name of readdirSync(dir)) {
+    const path = join(dir, name);
+    const st = statSync(path);
+    if (st.isDirectory()) {
+      const sub = countTree(path);
+      files += sub.files + 1;
+      bytes += sub.bytes;
+    } else if (st.isFile()) {
+      files += 1;
+      bytes += st.size;
+    }
+  }
+  return { files, bytes };
+}
+
+/** Pre-check 1: the app entrypoint exists and is a real file. */
+function checkAppEntry() {
   const index = join(here, 'app', 'index.html');
-  if (!existsSync(index)) fail('app/index.html is missing — the app has no page to hand in');
-  if (!statSync(index).isFile()) fail('app/index.html is not a regular file');
+  if (!existsSync(index) || !statSync(index).isFile()) {
+    fail('PRECHECK_INDEX_MISSING', `app/index.html is missing beside main.ts (${index})`);
+  }
+  if (statSync(index).size > 1048576) {
+    fail('PRECHECK_INDEX_TOO_BIG', 'app/index.html is over the 1 MiB cap');
+  }
 }
 
-/**
- * Screenshots must be 3 or 4 whole PNG/JPEG files, each within the byte cap, so
- * the gate's screenshots row passes on what this program writes.
- */
-function checkShots(): string[] {
+/** Pre-check 2: app/ stays inside the scorer's file and byte caps. */
+function checkAppSize() {
+  const { files, bytes } = countTree(join(here, 'app'));
+  if (files > DOSSIER_OPTIONS.app_max_files) {
+    fail('PRECHECK_APP_TOO_MANY_FILES', `app/ holds ${files} files, over the 993 cap`);
+  }
+  if (bytes > DOSSIER_OPTIONS.app_max_bytes) {
+    fail('PRECHECK_APP_TOO_BIG', `app/ holds ${bytes} bytes, over the 48 MiB cap`);
+  }
+}
+
+/** Reads a PNG or JPEG's pixel dimensions from its header, or null when the
+ *  file is neither. No image library: PNG stores them at fixed offsets, and
+ *  JPEG in its first SOF0/SOF2 frame marker. */
+function readImageDimensions(path) {
+  const buf = readFileSync(path);
+  if (buf.length >= 24 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+    return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+  }
+  if (buf.length >= 4 && buf[0] === 0xff && buf[1] === 0xd8) {
+    let offset = 2;
+    while (offset + 9 < buf.length) {
+      if (buf[offset] !== 0xff) break;
+      const marker = buf[offset + 1];
+      const length = buf.readUInt16BE(offset + 2);
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { w: buf.readUInt16BE(offset + 7), h: buf.readUInt16BE(offset + 5) };
+      }
+      offset += 2 + length;
+    }
+  }
+  return null;
+}
+
+/** Pre-check 3: screenshots/ holds 3 or 4 images, each within the cap. */
+function checkScreenshots() {
   const dir = join(here, 'screenshots');
-  if (!existsSync(dir)) fail('screenshots/ is missing — the entry needs 3 or 4 screenshots');
+  if (!existsSync(dir) || !statSync(dir).isDirectory()) {
+    fail('PRECHECK_SCREENSHOTS_MISSING', 'screenshots/ is missing beside main.ts');
+  }
   const names = readdirSync(dir)
-    .filter((name) => !name.startsWith('.'))
+    .filter((n) => !n.startsWith('.'))
     .sort();
-  if (names.length < 3 || names.length > DOSSIER_CAPS.screenshots.max) {
-    fail(`screenshots/ holds ${names.length} images — the gate wants 3 or 4`);
+  if (names.length < 3 || names.length > DOSSIER_OPTIONS.screenshots.max) {
+    fail(
+      'PRECHECK_SCREENSHOT_COUNT',
+      `screenshots/ holds ${names.length} images, need 3 or 4`,
+    );
   }
   for (const name of names) {
-    const lower = name.toLowerCase();
-    const dot = lower.lastIndexOf('.');
-    const ext = dot < 0 ? '' : lower.slice(dot);
-    if (!SHOT_EXTENSIONS.has(ext)) {
-      fail(`screenshots/${name}: a ${ext || 'missing'} extension — only PNG or JPEG`);
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(name)) {
+      fail('PRECHECK_SCREENSHOT_NAME', `screenshot name is not allowed: ${name}`);
     }
-    const size = statSync(join(dir, name)).size;
-    if (size > DOSSIER_CAPS.screenshots.max_bytes) {
-      fail(`screenshots/${name} is ${size} bytes — over the ${DOSSIER_CAPS.screenshots.max_bytes} allowed`);
+    const path = join(dir, name);
+    if (!statSync(path).isFile()) {
+      fail('PRECHECK_SCREENSHOT_NOT_FILE', `screenshot is not a regular file: ${name}`);
+    }
+    const size = statSync(path).size;
+    if (size > DOSSIER_OPTIONS.screenshots.max_bytes) {
+      fail(
+        'PRECHECK_SCREENSHOT_TOO_BIG',
+        `screenshot ${name} is ${size} bytes, over the 256 KiB cap`,
+      );
+    }
+    const dims = readImageDimensions(path);
+    if (!dims) {
+      fail('PRECHECK_SCREENSHOT_NOT_IMAGE', `screenshot ${name} is not a whole PNG or JPEG`);
+    }
+    const longSide = Math.max(dims.w, dims.h);
+    const shortSide = Math.min(dims.w, dims.h);
+    if (longSide > 1280 || shortSide < 480) {
+      fail(
+        'PRECHECK_SCREENSHOT_DIMENSIONS',
+        `screenshot ${name} is ${dims.w}x${dims.h}: long side over 1280 or short side under 480`,
+      );
     }
   }
   return names;
 }
 
-/** Copies one tree, replacing whatever the destination held, file for file. */
-function copyTree(from: string, to: string): void {
-  rmSync(to, { recursive: true, force: true });
-  cpSync(from, to, { recursive: true });
+/** Copies app/ and screenshots/ into a clean output directory. */
+function copyInputs() {
+  rmSync(out, { recursive: true, force: true });
+  mkdirSync(out, { recursive: true });
+  cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
+  mkdirSync(join(out, 'screenshots'), { recursive: true });
+  cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
 }
 
-function main(): void {
-  checkApp();
-  const shots = checkShots();
+/** Verifies the whole output stays inside the platform's own caps. */
+function checkOutputSize() {
+  const { files, bytes } = countTree(out);
+  if (files > OUTPUT_MAX_ENTRIES) {
+    fail('OUTPUT_TOO_MANY_ENTRIES', `/output holds ${files} entries, over the 1000 cap`);
+  }
+  if (bytes > OUTPUT_MAX_BYTES) {
+    fail('OUTPUT_TOO_BIG', `/output holds ${bytes} bytes, over the 64 MiB cap`);
+  }
+}
 
-  mkdirSync(outDir, { recursive: true });
-  copyTree(join(here, 'app'), join(outDir, 'app'));
-  copyTree(join(here, 'screenshots'), join(outDir, 'screenshots'));
+function main() {
+  checkAppEntry();
+  checkAppSize();
+  const shotNames = checkScreenshots();
+  copyInputs();
 
-  const dossier = buildDossier(outDir, DOSSIER_CAPS);
-  const dossierPath = join(outDir, 'dossier.json');
+  // buildDossier returns the dossier as a Uint8Array of JSON bytes: write
+  // it raw, and compare the rebuild as bytes too (String() on a Uint8Array
+  // would give a comma list of byte values, not the dossier text).
+  const dossier = buildDossier(out, DOSSIER_OPTIONS);
+  const dossierPath = join(out, 'dossier.json');
   writeFileSync(dossierPath, dossier);
 
-  // Read back what was written and compare: the dossier on disk must be exactly
-  // what the library builds from the same directory, or the gate's
-  // dossier_matches row would fail on it. The gate also caps the dossier itself
-  // at 1.5 MiB, so refuse an oversize one here rather than at the scorer.
+  // Verify: the dossier on disk is byte-identical to a fresh build, and
+  // under the cap — the exact property the scorer's dossier_matches checks.
   const written = readFileSync(dossierPath);
-  if (written.length > 1572864) {
-    fail(`dossier.json is ${written.length} bytes — over the 1.5 MiB the gate allows`);
+  const rebuilt = buildDossier(out, DOSSIER_OPTIONS);
+  if (!Buffer.from(written).equals(Buffer.from(rebuilt))) {
+    fail('DOSSIER_NOT_STABLE', 'dossier.json differs from a fresh buildDossier run');
   }
-  const rebuilt = buildDossier(outDir, DOSSIER_CAPS);
-  if (!written.equals(rebuilt)) {
-    fail('dossier.json on disk differs from a fresh build — refusing to hand in');
+  if (written.length > DOSSIER_MAX_BYTES) {
+    fail(
+      'DOSSIER_TOO_BIG',
+      `dossier.json is ${written.length} bytes, over the 1.5 MiB cap`,
+    );
   }
+  checkOutputSize();
 
-  const appFiles = readdirSync(join(outDir, 'app')).length;
+  const appStats = countTree(join(out, 'app'));
   console.log(
-    [
-      'Vice Cover Studio handed in:',
-      `  app/         ${appFiles} top-level entries`,
-      `  screenshots/ ${shots.map((s) => basename(s)).join(', ')}`,
-      `  dossier.json ${written.length} bytes (verified byte-identical on rebuild)`,
-      `  output:      ${outDir}`,
-    ].join('\n'),
+    `Vice Cover Studio handed in: app/ ${appStats.files} files, ` +
+      `${shotNames.length} screenshots (${shotNames.join(', ')}), ` +
+      `dossier.json ${written.length} bytes.`,
   );
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  if (error instanceof EntryError) {
+    console.error(`error: ${error.message}`);
+  } else {
+    console.error(`error: [UNEXPECTED] ${error instanceof Error ? error.message : String(error)}`);
+  }
+  process.exit(1);
+}
